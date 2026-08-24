@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>대피할지도 - 재난 안전 대피소 통합 플랫폼</title>
+
+    <!-- 1. Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 2. FontAwesome 아이콘 CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 3. 통합 외부 스타일시트 연결 -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- ================================================================= -->
+<!-- [헤더 구역] 로고 + 중앙 통합 검색창 및 GPS 버튼 -->
+<!-- ================================================================= -->
+<header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 h-16 relative flex items-center justify-between">
+
+        <!-- 좌측 로고 -->
+        <div class="flex items-center gap-2.5 shrink-0 cursor-pointer z-10" onclick="location.reload()">
+            <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white text-lg shadow-sm">
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            <span class="text-base font-bold text-slate-900">대피할지도</span>
+        </div>
+
+        <!-- 중앙 통합 검색창 (장소/건물명 검색) -->
+        <div class="absolute left-1/2 -translate-x-1/2 w-full max-w-md px-4">
+            <div class="relative flex items-center">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 text-slate-400 text-sm"></i>
+                <input type="text" id="searchInput"
+                       placeholder="장소, 건물명 또는 주소 검색 (예: 종로경찰서)"
+                       class="w-full bg-slate-100 text-sm rounded-lg pl-9 pr-24 py-2 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
+                       onkeypress="if(event.key === 'Enter') executeSearch()">
+
+                <!-- 내 위치 GPS 버튼 -->
+                <button onclick="getUserLocation()" title="내 위치 중심으로 찾기"
+                        class="absolute right-14 p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition flex items-center justify-center">
+                    <i class="fa-solid fa-crosshairs text-base"></i>
+                </button>
+
+                <!-- 검색 버튼 -->
+                <button onclick="executeSearch()"
+                        class="absolute right-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-md transition shadow-sm">
+                    검색
+                </button>
+            </div>
+        </div>
+
+        <div class="w-9 shrink-0"></div>
+    </div>
+</header>
+
+<!-- ================================================================= -->
+<!-- [메인 본문 구역] 동적 탭 컨테이너 + (좌: 목록 1칸 / 우: 지도 3칸) -->
+<!-- ================================================================= -->
+<main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-5">
+
+    <!-- 💡 DB 활성화 상태에 따라 2개든 4개든 중앙으로 자동 정렬되는 컨테이너 -->
+    <div id="disasterTabsArea" class="flex flex-wrap items-center justify-center gap-3">
+        <!-- DB 비동기 통신 결과에 따라 버튼이 이곳에 동적으로 생성됩니다 -->
+    </div>
+
+    <!-- 화면 분할 구역 -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-5">
+        <!-- [좌측] 목록 패널 -->
+        <div class="lg:col-span-1 bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex flex-col h-[650px]">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-3">
+                <h2 class="font-bold text-slate-800 text-sm" id="panelHeader">
+                    📊 대피소 목록
+                </h2>
+                <span id="totalCountBadge" class="text-xs text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded-full">0개</span>
+            </div>
+
+            <!-- 대피소 카드 목록 구역 -->
+            <div id="resultsList" class="space-y-3 overflow-y-auto pr-1 flex-1"></div>
+
+            <!-- 하단 페이지네이션 구역 -->
+            <div id="paginationArea" class="pt-3 border-t border-slate-100 flex items-center justify-center gap-1.5 shrink-0"></div>
+        </div>
+
+        <!-- [우측] 지도 iframe 프레임 -->
+        <div class="lg:col-span-3 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden h-[650px]">
+            <iframe id="mapFrame" src="map.html" class="w-full h-full border-0"></iframe>
+        </div>
+    </div>
+</main>
+
+<!-- ================================================================= -->
+<!-- [자바스크립트 로직] -->
+<!-- ================================================================= -->
+<script>
+    // 💡 활성화된 탭 목록 메타데이터를 보관할 변수
+    let activeTabs = [];
+    let currentType = '';       // 현재 선택된 tableName (예: earthquake, airstrike 등)
+    let currentBounds = null;
+
+    // 페이징 상태 변수
+    let currentPage = 1;
+    const itemsPerPage = 10;
+    let currentDisplayList = [];
+
+    // 지도 iframe 로드 시 초기 탭 메타데이터 fetch 및 렌더링 실행
+    document.getElementById('mapFrame').onload = function () {
+        initDisasterTabs();
+    };
+
+    /**
+     * 1. 💡 [비동기 탭 메타데이터 로드 및 생성]
+     * Spring Boot (/api/disaster-tabs/active)를 호출하여 DB에서 활성화된 탭 목록을 가져옵니다.
+     */
+    async function initDisasterTabs() {
+        try {
+            const response = await fetch('http://localhost:8080/api/disaster-tabs/active');
+            if (!response.ok) throw new Error("API 통신 실패");
+
+            // DB에서 활성화(is_active = true)된 데이터 배열 수신
+            const data = await response.json();
+
+            // 백엔드 API URL 매핑 테이블
+            const apiMap = {
+                earthquake: 'http://localhost:8080/api/shelters/earthquake',
+                flood: 'http://localhost:8080/api/shelters/flood',
+                airstrike: 'http://localhost:8080/api/shelters/air'
+            };
+
+            const iconMap = {
+                earthquake: '🏢',
+                flood: '🌊',
+                airstrike: '💣'
+            };
+
+            // 프론트엔드용 탭 객체로 정제
+            activeTabs = data.map(tab => ({
+                id: tab.id,
+                tableName: tab.tableName,
+                name: tab.name,
+                icon: iconMap[tab.tableName] || '🚨',
+                apiUrl: apiMap[tab.tableName] || `http://localhost:8080/api/shelters/${tab.tableName}`
+            }));
+
+        } catch (e) {
+            console.error("ℹ️ DB 활성 탭 목록 호출 에러:", e);
+            activeTabs = [];
+        }
+
+        renderDisasterTabs();
+
+        // 첫 번째 활성 탭을 기본 선택 상태로 지정
+        if (activeTabs.length > 0) {
+            switchDisaster(activeTabs[0].tableName);
+        }
+    }
+
+    /**
+     * 2. 💡 [동적 탭 버튼 DOM 렌더링]
+     * activeTabs 개수(2개, 3개, 4개 등)에 맞춰 버튼을 생성하고 flex 레이아웃으로 중앙 배치합니다.
+     */
+    function renderDisasterTabs() {
+        const container = document.getElementById('disasterTabsArea');
+        if (!container) return;
+        container.innerHTML = '';
+
+        activeTabs.forEach(tab => {
+            const btn = document.createElement('button');
+            btn.id = `tab-${tab.tableName}`;
+            btn.className = "flex-1 min-w-[140px] max-w-[240px] py-3 px-4 rounded-xl font-bold text-sm shadow-sm transition-all duration-200 tab-btn-inactive";
+            btn.innerHTML = `${tab.icon} ${tab.name}`;
+            btn.onclick = () => switchDisaster(tab.tableName);
+            container.appendChild(btn);
+        });
+    }
+
+    /**
+     * 3. 바운딩 박스 서버 통신 (선택된 탭의 API URL 사용)
+     */
+    async function filterByBounds(bounds) {
+        currentBounds = bounds;
+        if (!currentType) return;
+
+        const currentTabObj = activeTabs.find(t => t.tableName === currentType);
+        if (!currentTabObj) return;
+
+        const queryParams = `minLat=${bounds.minLat}&maxLat=${bounds.maxLat}&minLng=${bounds.minLng}&maxLng=${bounds.maxLng}`;
+        const targetUrl = `${currentTabObj.apiUrl}?${queryParams}`;
+
+        try {
+            const response = await fetch(targetUrl);
+            const dbData = await response.json();
+
+            // 스마트 좌표 판별 로직
+            currentDisplayList = dbData.map(item => {
+                const val1 = Number(item.lat || item.la || item.y || item.lot || 0);
+                const val2 = Number(item.lot || item.lo || item.lng || item.lon || item.x || 0);
+
+                const realLat = (val1 >= 33 && val1 <= 39) ? val1 : ((val2 >= 33 && val2 <= 39) ? val2 : NaN);
+                const realLng = (val1 >= 120 && val1 <= 135) ? val1 : ((val2 >= 120 && val2 <= 135) ? val2 : NaN);
+
+                return {
+                    id: item.shlt_id || item.id || item.seq,
+                    name: item.fclt_nm || item.vt_acm_dfclls_nm || item.equp_name || item.shelterName || '이름 없음',
+                    address: item.daddr || item.rn_addr || item.lnm_addr || item.address || '주소 정보 없음',
+                    lat: realLat,
+                    lng: realLng
+                };
+            }).filter(item => !isNaN(item.lat) && !isNaN(item.lng));
+
+            currentPage = 1;
+
+            const badge = document.getElementById('totalCountBadge');
+            if (badge) badge.innerText = `화면 내 ${currentDisplayList.length}개`;
+
+            updateMapWithFrame(currentDisplayList);
+            renderCurrentPage();
+
+        } catch (error) {
+            console.error(`[${currentType}] 영역별 데이터 수신 실패:`, error);
+        }
+    }
+
+    /**
+     * 4. 탭 전환 처리
+     */
+    function switchDisaster(tableName) {
+        currentType = tableName;
+
+        // 동적으로 존재하는 활성 탭 버튼 스타일 갱신
+        activeTabs.forEach(tab => {
+            const btn = document.getElementById(`tab-${tab.tableName}`);
+            if (!btn) return;
+            if (tab.tableName === tableName) {
+                btn.className = "flex-1 min-w-[140px] max-w-[240px] py-3 px-4 rounded-xl font-bold text-sm shadow-sm transition-all duration-200 tab-btn-active";
+            } else {
+                btn.className = "flex-1 min-w-[140px] max-w-[240px] py-3 px-4 rounded-xl font-bold text-sm shadow-sm transition-all duration-200 tab-btn-inactive";
+            }
+        });
+
+        const selected = activeTabs.find(t => t.tableName === tableName);
+        const headerElement = document.getElementById('panelHeader');
+        if (headerElement && selected) {
+            headerElement.innerText = `📊 ${selected.icon} ${selected.name} 목록`;
+        }
+
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = '';
+
+        if (currentBounds) {
+            filterByBounds(currentBounds);
+        }
+    }
+
+    /**
+     * 5. 카카오 장소 검색 실행
+     */
+    function executeSearch() {
+        const searchInput = document.getElementById('searchInput');
+        const keyword = searchInput.value.trim();
+
+        if (keyword === '') {
+            if (currentBounds) filterByBounds(currentBounds);
+            return;
+        }
+
+        const frame = document.getElementById('mapFrame');
+        if (frame && frame.contentWindow && typeof frame.contentWindow.searchPlace === 'function') {
+            frame.contentWindow.searchPlace(keyword);
+        }
+    }
+
+    /**
+     * 6. GPS 내 위치 탐색
+     */
+    function getUserLocation() {
+        if (!navigator.geolocation) {
+            alert("이 브라우저에서는 위치 정보(GPS)를 지원하지 않습니다.");
+            return;
+        }
+
+        const badge = document.getElementById('totalCountBadge');
+        if (badge) badge.innerText = "내 위치 찾는 중...";
+
+        navigator.geolocation.getCurrentPosition(
+            function (position) {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+
+                const frame = document.getElementById('mapFrame');
+                if (frame && frame.contentWindow && typeof frame.contentWindow.moveToUserLocation === 'function') {
+                    frame.contentWindow.moveToUserLocation(userLat, userLng);
+                }
+            },
+            function (error) {
+                console.error("GPS 위치 획득 실패:", error);
+                alert("위치 정보를 가져올 수 없습니다. 브라우저 위치 권한을 확인해 주세요.");
+                if (badge) badge.innerText = `화면 내 ${currentDisplayList.length}개`;
+            },
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+        );
+    }
+
+    /**
+     * 7. 현재 페이지 카드 및 페이징 버튼 렌더링
+     */
+    function renderCurrentPage() {
+        const listArea = document.getElementById('resultsList');
+        const pageArea = document.getElementById('paginationArea');
+        listArea.innerHTML = '';
+        pageArea.innerHTML = '';
+
+        if (currentDisplayList.length === 0) {
+            listArea.innerHTML = `<div class="p-6 text-center text-xs text-slate-400 leading-relaxed">현재 지도 화면에 대피소가 없습니다.<br>지도를 이동하거나 축소해 보세요.</div>`;
+            return;
+        }
+
+        const totalItems = currentDisplayList.length;
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+        const pagedItems = currentDisplayList.slice(startIndex, endIndex);
+
+        pagedItems.forEach((shelter, idx) => {
+            const itemNumber = startIndex + idx + 1;
+            const card = document.createElement('div');
+            card.className = "shelter-card";
+
+            card.onclick = function () {
+                const frame = document.getElementById('mapFrame');
+                if (frame && frame.contentWindow && typeof frame.contentWindow.panToLocation === 'function') {
+                    frame.contentWindow.panToLocation(shelter.lat, shelter.lng);
+                }
+            };
+
+            card.innerHTML = `
+                <div class="flex items-center justify-between mb-1">
+                    <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">No.${itemNumber}</span>
+                </div>
+                <h3 class="text-sm font-bold text-slate-900">${shelter.name}</h3>
+                <p class="text-xs text-slate-500 mt-1">📍 ${shelter.address}</p>
+            `;
+            listArea.appendChild(card);
+        });
+
+        // 5개 단위 페이징 버튼 그룹
+        const pageGroupSize = 5;
+        const currentGroup = Math.ceil(currentPage / pageGroupSize);
+        const startPage = (currentGroup - 1) * pageGroupSize + 1;
+        const endPage = Math.min(startPage + pageGroupSize - 1, totalPages);
+
+        const prevBtn = document.createElement('button');
+        prevBtn.innerHTML = '<i class="fa-solid fa-chevron-left text-[10px]"></i>';
+        prevBtn.className = `page-btn ${currentPage === 1 ? 'page-btn-disabled' : 'page-btn-normal'}`;
+        prevBtn.disabled = (currentPage === 1);
+        prevBtn.onclick = () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderCurrentPage();
+            }
+        };
+        pageArea.appendChild(prevBtn);
+
+        for (let p = startPage; p <= endPage; p++) {
+            const numBtn = document.createElement('button');
+            numBtn.innerText = p;
+            numBtn.className = `page-btn ${p === currentPage ? 'page-btn-active' : 'page-btn-normal'}`;
+            numBtn.onclick = () => {
+                currentPage = p;
+                renderCurrentPage();
+            };
+            pageArea.appendChild(numBtn);
+        }
+
+        const nextBtn = document.createElement('button');
+        nextBtn.innerHTML = '<i class="fa-solid fa-chevron-right text-[10px]"></i>';
+        nextBtn.className = `page-btn ${currentPage === totalPages ? 'page-btn-disabled' : 'page-btn-normal'}`;
+        nextBtn.disabled = (currentPage === totalPages);
+        nextBtn.onclick = () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderCurrentPage();
+            }
+        };
+        pageArea.appendChild(nextBtn);
+    }
+
+    /**
+     * 8. 마커 클릭 시 단일 대피소 집중 표시
+     */
+    function selectShelterFromMap(selectedShelter) {
+        const listArea = document.getElementById('resultsList');
+        const pageArea = document.getElementById('paginationArea');
+        const badge = document.getElementById('totalCountBadge');
+
+        if (badge) badge.innerText = `선택된 대피소`;
+        pageArea.innerHTML = '';
+
+        listArea.innerHTML = `
+            <div class="mb-2">
+                <button onclick="if(currentBounds) filterByBounds(currentBounds)"
+                        class="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-arrow-rotate-left text-[10px]"></i> 전체 목록 다시보기
+                </button>
+            </div>
+            <div class="shelter-card border-2 border-blue-500 bg-blue-50/50 shadow-sm">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">선택됨</span>
+                    <span class="text-[10px] text-blue-600 font-semibold">📍 지도에서 클릭</span>
+                </div>
+                <h3 class="text-sm font-bold text-slate-900">${selectedShelter.name}</h3>
+                <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">🏢 주소: ${selectedShelter.address}</p>
+                <div class="mt-3 pt-2 border-t border-blue-100 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>위도: ${selectedShelter.lat.toFixed(4)}</span>
+                    <span>경도: ${selectedShelter.lng.toFixed(4)}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    /**
+     * 9. 지도 마커 갱신 호출
+     */
+    function updateMapWithFrame(dataList) {
+        const frame = document.getElementById('mapFrame');
+        if (frame && frame.contentWindow && typeof frame.contentWindow.setMarkers === 'function') {
+            frame.contentWindow.setMarkers(dataList);
+        }
+    }
+</script>
+</body>
+</html>
