@@ -4,10 +4,19 @@ import com.example.demo.domain.FloodShelter;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-// 1. Spring Data JPA가 제공하는 JpaRepository를 상속받습니다.
-// 2. <대상 엔티티 클래스, 엔티티의 Primary Key(@Id) 타입>을 지정합니다.
+import java.math.BigDecimal;
+import java.util.List;
+
 @Repository
-public interface FloodShelterRepository extends JpaRepository<FloodShelter, Long> {
-    // JpaRepository를 상속받으면 기본적인 findAll(), findById(), save() 등의 메서드를
-    // 스프링이 자동으로 구현체를 만들어 빈(Bean)으로 등록해 줍니다.
+// 💡 엔티티 PK(shlt_id) 타입인 String으로 일치시킵니다.
+public interface FloodShelterRepository extends JpaRepository<FloodShelter, String> {
+
+    /**
+     * [수해 대피소 바운딩 박스 범위 검색 쿼리 메서드]
+     * 위도(lat)와 경도(lot) 범위를 기준으로 현재 지도 화면 영역 내 대피소만 조회합니다.
+     */
+    List<FloodShelter> findByLatBetweenAndLotBetween(
+            BigDecimal minLat, BigDecimal maxLat,
+            BigDecimal minLot, BigDecimal maxLot
+    );
 }

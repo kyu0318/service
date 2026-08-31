@@ -4,6 +4,7 @@ import com.example.demo.domain.DisasterTab;
 import com.example.demo.repository.DisasterTabRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -11,14 +12,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/disaster-tabs")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // 프론트엔드 연동 CORS 허용
+@CrossOrigin(origins = "*")
 public class DisasterTabController {
 
     private final DisasterTabRepository disasterTabRepository;
 
     /**
-     * 1. 💡 [사용자 화면용] 현재 활성화(is_active = 1)된 탭 목록만 반환
-     * 호출: GET http://localhost:8080/api/disaster-tabs/active
+     * 1. [사용자 화면용] 현재 활성화(is_active = 1)된 탭 목록만 반환
+     * 호출: GET /api/disaster-tabs/active
      */
     @GetMapping("/active")
     public ResponseEntity<List<DisasterTab>> getActiveTabs() {
@@ -26,8 +27,8 @@ public class DisasterTabController {
     }
 
     /**
-     * 2. 💡 [관리자 Admin용] 전체 탭 목록 반환 (활성/비활성 스위치 표시용)
-     * 호출: GET http://localhost:8080/api/disaster-tabs/all
+     * 2. [관리자용] 전체 탭 목록 반환
+     * 호출: GET /api/disaster-tabs/all
      */
     @GetMapping("/all")
     public ResponseEntity<List<DisasterTab>> getAllTabs() {
@@ -35,10 +36,11 @@ public class DisasterTabController {
     }
 
     /**
-     * 3. 💡 [관리자 Admin용] 탭 활성화/비활성화 상태 즉시 변경
-     * 호출: PATCH http://localhost:8080/api/disaster-tabs/{id}/status?active=false
+     * 3. [관리자용] 탭 활성화/비활성화 상태 변경
+     * 호출: PATCH /api/disaster-tabs/{id}/status?active=false
      */
     @PatchMapping("/{id}/status")
+    @Transactional // 💡 변경 감지(Dirty Checking)로 안전하게 DB 커밋
     public ResponseEntity<String> updateTabStatus(
             @PathVariable("id") Long id,
             @RequestParam("active") boolean active
@@ -47,8 +49,9 @@ public class DisasterTabController {
                 .orElseThrow(() -> new IllegalArgumentException("해당 탭이 존재하지 않습니다. id=" + id));
 
         tab.setActive(active);
-        disasterTabRepository.save(tab); // DB 상태 즉시 반영
+        // @Transactional 안에서는 dirty checking으로 자동 UPDATE되지만 명시적 save도 무방합니다.
+        disasterTabRepository.save(tab);
 
-        return ResponseEntity.ok("상태 변경 완료: " + active);
+        return ResponseEntity.ok("상태 변경 완료 (ID: " + id + ", active: " + active + ")");
     }
 }

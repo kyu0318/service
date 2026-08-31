@@ -4,11 +4,22 @@
     <meta charset="UTF-8">
     <title>카카오 지도 프레임</title>
 
-    <!-- 공용 스타일시트 연결 -->
-    <link rel="stylesheet" href="style.css">
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
 
-    <!-- 카카오맵 SDK (장소 검색 라이브러리 포함) -->
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=fb918912c351246220dec79f1b6ba2d7&libraries=services&autoload=false"></script>
+    <!-- 💡 카카오 지도 SDK 로드 -->
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=db487678d744dd9432c2429589b3e655&libraries=services,clusterer&autoload=false"></script>
 </head>
 <body>
 
@@ -16,25 +27,48 @@
 
 <script>
     var map = null;
-    var ps = null; // 카카오 장소 검색 객체
+    var ps = null;
+    var clusterer = null;
     var currentMarkers = [];
-    var myLocationMarker = null;     // GPS 내 위치 마커
-    var searchLocationMarker = null; // 검색된 특정 장소 마커
+    var myLocationMarker = null;
+    var searchLocationMarker = null;
     var isMapReady = false;
 
-    // 1. 카카오맵 SDK 초기화
+    // 💡 위도/경도 자동 판별 및 뒤바뀜 보정 함수
+    function normalizeCoords(val1, val2) {
+        var num1 = parseFloat(val1);
+        var num2 = parseFloat(val2);
+        if (isNaN(num1) || isNaN(num2)) return null;
+
+        // 한국 기준: 위도는 30대, 경도는 120대
+        if (num1 >= 30 && num1 <= 45 && num2 >= 120 && num2 <= 135) {
+            return { lat: num1, lng: num2 };
+        } else if (num2 >= 30 && num2 <= 45 && num1 >= 120 && num1 <= 135) {
+            return { lat: num2, lng: num1 }; // 반대로 들어왔을 때 자동 교정
+        }
+        return { lat: num1, lng: num2 };
+    }
+
+    // 1. 카카오맵 SDK 수동 로드
     kakao.maps.load(function () {
         var container = document.getElementById('map');
         var options = {
-            center: new kakao.maps.LatLng(37.4954, 127.0333), // 초기 중심점 (서울 강남 인근)
-            level: 7 // 초기 줌 레벨
+            center: new kakao.maps.LatLng(37.4954, 127.0333),
+            level: 7
         };
         map = new kakao.maps.Map(container, options);
-        ps = new kakao.maps.services.Places(); // 장소 검색 서비스 객체 초기화
+        ps = new kakao.maps.services.Places();
+
+        // 마커 클러스터러 생성
+        clusterer = new kakao.maps.MarkerClusterer({
+            map: map,
+            averageCenter: true,
+            minLevel: 6
+        });
+
         isMapReady = true;
         map.relayout();
 
-        // 💡 지도의 이동 또는 줌(확대/축소)이 완전히 멈췄을 때 부모창(index.html)으로 현재 뷰포트 좌표 전달
         kakao.maps.event.addListener(map, 'idle', function () {
             var bounds = map.getBounds();
             var sw = bounds.getSouthWest();
@@ -49,6 +83,11 @@
                 });
             }
         });
+
+        // 지도 생성 직후 부모창으로 1회 좌표 전송
+        setTimeout(function () {
+            if (map) kakao.maps.event.trigger(map, 'idle');
+        }, 300);
     });
 
     /**
@@ -83,15 +122,16 @@
     }
 
     /**
-     * 3. 💡 [수정 완료] 부모창에서 받은 데이터로 마커만 생성 (화면 강제 튕김 방지)
+     * 3. 부모창에서 받은 데이터로 마커 생성 (좌표 보정 적용)
      */
     function setMarkers(dataList) {
-        if (!isMapReady || !map) {
+        if (!isMapReady || !map || !clusterer) {
             setTimeout(function () { setMarkers(dataList); }, 150);
             return;
         }
 
-        // 기존 마커 전체 삭제
+        // 기존 마커 클러스터러 초기화
+        clusterer.clear();
         for (var i = 0; i < currentMarkers.length; i++) {
             currentMarkers[i].setMap(null);
         }
@@ -99,31 +139,34 @@
 
         if (!dataList || dataList.length === 0) return;
 
-        // 전달받은 구역 내 데이터만 지도 위에 표시
-        dataList.forEach(function (shelter) {
-            var lat = Number(shelter.lat);
-            var lng = Number(shelter.lng);
+        var markers = [];
 
-            if (!isNaN(lat) && !isNaN(lng) && lat > 0 && lng > 0) {
-                var position = new kakao.maps.LatLng(lat, lng);
+        dataList.forEach(function (shelter) {
+            var rawLat = shelter.lat || shelter.la || shelter.latitude;
+            var rawLng = shelter.lot || shelter.lng || shelter.lo || shelter.longitude;
+            var coords = normalizeCoords(rawLat, rawLng);
+
+            if (coords && coords.lat > 0 && coords.lng > 0) {
+                var position = new kakao.maps.LatLng(coords.lat, coords.lng);
                 var marker = new kakao.maps.Marker({
                     position: position,
-                    map: map,
-                    title: shelter.name || ''
+                    title: shelter.name || shelter.shltNm || shelter.shl_nm || shelter.fclt_nm || '대피소'
                 });
 
-                // 마커 클릭 시 부모창의 대피소 상세 카드 활성화 함수 호출
                 kakao.maps.event.addListener(marker, 'click', function () {
+                    map.setLevel(3);
+                    map.panTo(position);
                     if (window.parent && typeof window.parent.selectShelterFromMap === 'function') {
                         window.parent.selectShelterFromMap(shelter);
                     }
                 });
 
-                currentMarkers.push(marker);
+                markers.push(marker);
             }
         });
 
-        // 🚨 [해결] setBounds 코드를 제거하여 사용자가 스크롤/이동한 위치가 그대로 고정됩니다!
+        currentMarkers = markers;
+        clusterer.addMarkers(markers);
     }
 
     /**
@@ -132,7 +175,10 @@
     function moveToUserLocation(lat, lng) {
         if (!isMapReady || !map) return;
 
-        var userPos = new kakao.maps.LatLng(lat, lng);
+        var coords = normalizeCoords(lat, lng);
+        if (!coords) return;
+
+        var userPos = new kakao.maps.LatLng(coords.lat, coords.lng);
 
         if (myLocationMarker) {
             myLocationMarker.setMap(null);
@@ -149,11 +195,19 @@
     }
 
     /**
-     * 5. 좌측 카드 클릭 시 해당 대피소 위치로 부드럽게 이동
+     * 5. 좌측 카드 클릭 시 해당 대피소 위치로 이동 (공습대피소 뒤바뀜 완벽 대응)
      */
     function panToLocation(lat, lng) {
         if (!isMapReady || !map) return;
-        var movePos = new kakao.maps.LatLng(Number(lat), Number(lng));
+
+        var coords = normalizeCoords(lat, lng);
+        if (!coords) {
+            console.error("유효하지 않은 좌표:", lat, lng);
+            return;
+        }
+
+        var movePos = new kakao.maps.LatLng(coords.lat, coords.lng);
+        map.setLevel(3);
         map.panTo(movePos);
     }
 </script>

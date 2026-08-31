@@ -6,39 +6,47 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
-// 1. 반환 데이터를 HTML 뷰가 아닌 JSON 형식의 HTTP 응답 본문(Body)으로 전송합니다.
 @RestController
-// 2. 이 컨트롤러에서 처리할 공통 기본 URL 경로를 지정합니다.
 @RequestMapping("/api/shelters/air")
-// 3. final 필드인 Service의 생성자 주입 코드를 롬복으로 자동 완성합니다.
 @RequiredArgsConstructor
-// 4. 프론트엔드(HTML/JS)와의 통신 시 브라우저의 CORS 정책 차단을 방지합니다.
 @CrossOrigin(origins = "*")
 public class AirRaidShelterController {
 
-    // 5. 비즈니스 로직을 호출할 Service 객체를 선언합니다.
     private final AirRaidShelterService airRaidShelterService;
 
     /**
-     * GET 요청 시 공습 대피소 전체 목록을 JSON 형태로 응답합니다.
-     * 호출 URL: http://localhost:8080/api/shelters/air
+     * 💡 [전체 조회 및 바운딩 박스(지도 영역) 동시 지원]
+     * 호출 예시:
+     * - /api/shelters/air
+     * - /api/shelters/air?minLat=37.4&maxLat=37.6&minLng=126.9&maxLng=127.1
      */
     @GetMapping
-    public ResponseEntity<List<AirRaidShelter>> getAllAirRaidShelters() {
-        // Service로부터 대피소 리스트를 받아옵니다.
-        List<AirRaidShelter> shelters = airRaidShelterService.findAllAirRaidShelters();
-        // 200 OK 상태 코드와 함께 JSON 리스트를 반환합니다.
+    public ResponseEntity<List<AirRaidShelter>> getAirRaidShelters(
+            @RequestParam(name = "minLat", required = false) BigDecimal minLat,
+            @RequestParam(name = "maxLat", required = false) BigDecimal maxLat,
+            @RequestParam(name = "minLng", required = false) BigDecimal minLng,
+            @RequestParam(name = "maxLng", required = false) BigDecimal maxLng) {
+
+        List<AirRaidShelter> shelters;
+
+        if (minLat != null && maxLat != null && minLng != null && maxLng != null) {
+            shelters = airRaidShelterService.findSheltersByBounds(minLat, maxLat, minLng, maxLng);
+        } else {
+            shelters = airRaidShelterService.findAllAirRaidShelters();
+        }
+
         return ResponseEntity.ok(shelters);
     }
 
     /**
-     * GET 요청 시 특정 대피소 1개의 상세 정보를 JSON 형태로 응답합니다.
-     * 호출 URL 예시: http://localhost:8080/api/shelters/air/1
+     * 💡 [수정] 단일 공습 대피소 상세 조회 (String PK 일치)
+     * 호출 예시: /api/shelters/air/AIR_0_0
      */
     @GetMapping("/{id}")
-    public ResponseEntity<AirRaidShelter> getShelterById(@PathVariable("id") Long id) {
+    public ResponseEntity<AirRaidShelter> getShelterById(@PathVariable("id") String id) {
         AirRaidShelter shelter = airRaidShelterService.findShelterById(id);
         return ResponseEntity.ok(shelter);
     }
