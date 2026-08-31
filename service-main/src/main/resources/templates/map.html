@@ -7,8 +7,8 @@
     <!-- 공용 스타일시트 연결 -->
     <link rel="stylesheet" th:href="@{/style.css}">
 
-    <!-- 카카오맵 SDK (장소 검색 및 주소 변환 Geocoder 라이브러리 포함) -->
-    <script type="text/javascript" th:src="@{'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + ${kakaoKey} + '&libraries=services&autoload=false'}"></script>
+    <!-- [수정 완료] 외부 차단을 우회하기 위해 Nginx 프록시 경로(/mapjsapi/)를 타도록 변경 -->
+    <script type="text/javascript" th:src="@{'/mapjsapi/sdk.js?appkey=' + ${kakaoKey} + '&libraries=services&autoload=false'}"></script>
 </head>
 <body>
 
