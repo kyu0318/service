@@ -1,0 +1,30 @@
+services:
+  web:
+    image: nginx:latest
+    container_name: my-nginx-green
+    dns:
+        - 8.8.8.8
+        - 8.8.4.4
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    build: .
+    container_name: my-spring-green
+    environment:
+      # [핵심] 관리자 사설 IP와 비밀번호를 실제 값으로 입력하세요!
+      - SPRING_DATASOURCE_URL=jdbc:mysql://192.168.40.5:3306/shelter_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=com.mysql.cj.jdbc.Driver
+      - SPRING_JPA_DATABASE_PLATFORM=org.hibernate.dialect.MySQLDialect
+    restart: always
+
+networks:
+  default:
+    name: app-net-green
