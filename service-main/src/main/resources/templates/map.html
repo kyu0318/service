@@ -8,9 +8,9 @@
     <!-- 공용 스타일시트 연결 -->
     <link rel="stylesheet" th:href="@{/style.css}">
 
-    <!-- 카카오맵 SDK (장소 검색 및 주소 변환 Geocoder 라이브러리 포함) -->
+    <!-- 카카오맵 SDK (프로토콜 명시 및 캐시 무력화 파라미터 적용) -->
     <script type="text/javascript"
-            th:src="|https://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&libraries=services&autoload=false|">
+            th:src="|https://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&libraries=services&autoload=false&v=2026|">
     </script>
 </head>
 <body>
@@ -78,7 +78,7 @@
     }
 
     /**
-     * 💡 [수정 완료] 현재 화면 사각 영역 좌표 + 지도 중심점(기준 좌표)을 부모(index.html)로 전송
+     * 현재 화면 사각 영역 좌표 + 지도 중심점(기준 좌표)을 부모(index.html)로 전송
      */
     function notifyParentBounds() {
         if (!map) return;
@@ -86,7 +86,7 @@
         var bounds = map.getBounds();
         var sw = bounds.getSouthWest(); // 화면 남서쪽(좌하단)
         var ne = bounds.getNorthEast(); // 화면 북동쪽(우상단)
-        var center = map.getCenter();   // 💡 [핵심] 현재 지도의 정중앙(검색된 위치) 좌표 획득
+        var center = map.getCenter();   // 현재 지도의 정중앙 좌표 획득
 
         if (window.parent && typeof window.parent.filterByBounds === 'function') {
             window.parent.filterByBounds({
@@ -94,8 +94,8 @@
                 maxLat: ne.getLat(),
                 minLng: sw.getLng(),
                 maxLng: ne.getLng(),
-                centerLat: center.getLat(), // 💡 기준 위도 전달
-                centerLng: center.getLng()  // 💡 기준 경도 전달
+                centerLat: center.getLat(),
+                centerLng: center.getLng()
             });
         }
     }
