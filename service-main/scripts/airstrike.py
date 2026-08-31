@@ -64,7 +64,7 @@ BASE_URL = (
 # ============================================================
 
 db_config = {
-    "host": "10.12.0.2",
+    "host": "192.168.40.5",
     "user": "root",
     "password": DB_PASSWORD,
     "database": "shelter_db",

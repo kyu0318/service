@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 # --- [DB 접속 정보 설정] ---
 DB_USER = "root"
 DB_PASSWORD = "root"
-DB_HOST = "10.12.0.2"
+DB_HOST = "192.168.40.5"
 DB_PORT = "3306"
 DB_NAME = "shelter_db"
 
