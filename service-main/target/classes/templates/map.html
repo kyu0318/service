@@ -9,7 +9,7 @@
 
     <!-- 카카오맵 SDK (장소 검색 및 주소 변환 Geocoder 라이브러리 포함) -->
     <script type="text/javascript"
-            th:src="|https://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&libraries=services&autoload=false|">
+            th:src="|http://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoKey}&libraries=services&autoload=false|">
     </script>
 </head>
 <body>
@@ -77,7 +77,7 @@
     }
 
     /**
-     * 💡 [수정 완료] 현재 화면 사각 영역 좌표 + 지도 중심점(기준 좌표)을 부모(index.html)로 전송
+     * 현재 화면 사각 영역 좌표 + 지도 중심점(기준 좌표)을 부모(index.html)로 전송
      */
     function notifyParentBounds() {
         if (!map) return;
@@ -85,7 +85,7 @@
         var bounds = map.getBounds();
         var sw = bounds.getSouthWest(); // 화면 남서쪽(좌하단)
         var ne = bounds.getNorthEast(); // 화면 북동쪽(우상단)
-        var center = map.getCenter();   // 💡 [핵심] 현재 지도의 정중앙(검색된 위치) 좌표 획득
+        var center = map.getCenter();   // 현재 지도의 정중앙 좌표 획득
 
         if (window.parent && typeof window.parent.filterByBounds === 'function') {
             window.parent.filterByBounds({
@@ -93,50 +93,40 @@
                 maxLat: ne.getLat(),
                 minLng: sw.getLng(),
                 maxLng: ne.getLng(),
-                centerLat: center.getLat(), // 💡 기준 위도 전달
-                centerLng: center.getLng()  // 💡 기준 경도 전달
+                centerLat: center.getLat(),
+                centerLng: center.getLng()
             });
         }
     }
 
     /**
-     * 2. [스마트 장소/주소 통합 검색]
+     * 2. [CORS 해결 핵심] 백엔드 프록시 서버를 통해 장소/주소 검색 요청
      */
     function searchPlace(keyword) {
-        if (!isMapReady || !ps || !geocoder) return;
+        if (!isMapReady) return;
 
-        // 1순위: 행정동/지명(예: '신림', '신림동', '역삼동')인지 주소 검색 먼저 시도
-        geocoder.addressSearch(keyword, function (addrResult, addrStatus) {
-            if (addrStatus === kakao.maps.services.Status.OK && addrResult.length > 0) {
-                var target = addrResult[0];
-                moveAndMarkPlace(target.y, target.x, target.address_name);
-                return;
-            }
-
-            // 2순위: 키워드 장소 검색 수행
-            ps.keywordSearch(keyword, function (data, status, pagination) {
-                if (status === kakao.maps.services.Status.OK && data.length > 0) {
-
-                    var bestPlace = data[0];
-
-                    // 지하철역(SW8)이나 검색어+역(예: 신림역)을 최우선 선택
-                    for (var i = 0; i < data.length; i++) {
-                        var item = data[i];
-                        if (item.category_group_code === 'SW8' || item.place_name.includes(keyword + '역')) {
-                            bestPlace = item;
-                            break;
-                        }
-                    }
-
-                    moveAndMarkPlace(bestPlace.y, bestPlace.x, bestPlace.place_name);
-
-                } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
-                    alert("일치하는 장소를 찾을 수 없습니다.");
-                } else {
-                    alert("장소 검색 중 오류가 발생했습니다.");
+        // 브라우저가 직접 dapi.kakao.com을 호출하지 않고, 우리 백엔드 서버(`/api/kakao/search`)를 거치도록 요청
+        fetch(`/api/kakao/search?query=${encodeURIComponent(keyword)}`, {
+            method: 'GET'
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("장소 검색 중 오류가 발생했습니다.");
                 }
+                return response.json();
+            })
+            .then(data => {
+                // 백엔드가 카카오 API를 대신 찔러서 받아온 위도(lat), 경도(lng), 장소명(placeName)을 처리
+                if (data && data.lat && data.lng) {
+                    moveAndMarkPlace(data.lat, data.lng, data.placeName);
+                } else {
+                    alert("일치하는 장소를 찾을 수 없습니다.");
+                }
+            })
+            .catch(error => {
+                console.error("Search Error:", error);
+                alert("장소 검색 중 오류가 발생했습니다.");
             });
-        });
     }
 
     /**
