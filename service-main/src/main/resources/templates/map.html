@@ -7,8 +7,10 @@
     <!-- 공용 스타일시트 연결 -->
     <link rel="stylesheet" th:href="@{/style.css}">
 
-    <!-- [수정 완료] 외부 차단을 우회하기 위해 Nginx 프록시 경로(/mapjsapi/)를 타도록 변경 -->
-    <script type="text/javascript" th:src="@{'/mapjsapi/sdk.js?appkey=' + ${kakaoKey} + '&libraries=services&autoload=false'}"></script>
+    <!-- 💡 [핵심 수정 완료] 외부 직접 호출 대신 Nginx 프록시 우회 경로(/mapjsapi/) 적용 -->
+    <script type="text/javascript"
+            th:src="|/mapjsapi/v2/maps/sdk.js?appkey=${kakaoKey}&libraries=services&autoload=false|">
+    </script>
 </head>
 <body>
 
@@ -25,44 +27,48 @@
     var isMapReady = false;
     var boundsTimer = null; // 연속 줌/드래그 시 서버 부하 방지용 타이머
 
-    // 1. 카카오맵 SDK 초기화
-    kakao.maps.load(function () {
-        var container = document.getElementById('map');
-        var options = {
-            center: new kakao.maps.LatLng(37.4954, 127.0333), // 초기 중심점 (서울 강남 인근)
-            level: 7 // 초기 줌 레벨
-        };
-        map = new kakao.maps.Map(container, options);
-        ps = new kakao.maps.services.Places(); // 장소 검색 서비스 객체 초기화
-        geocoder = new kakao.maps.services.Geocoder(); // 주소/행정동 서비스 객체 초기화
+    // 1. 카카오맵 SDK 초기화 (안전 방어 코드 적용)
+    if (typeof kakao !== 'undefined' && kakao.maps) {
+        kakao.maps.load(function () {
+            var container = document.getElementById('map');
+            var options = {
+                center: new kakao.maps.LatLng(37.4954, 127.0333), // 초기 중심점 (서울 강남 인근)
+                level: 7 // 초기 줌 레벨
+            };
+            map = new kakao.maps.Map(container, options);
+            ps = new kakao.maps.services.Places(); // 장소 검색 서비스 객체 초기화
+            geocoder = new kakao.maps.services.Geocoder(); // 주소/행정동 서비스 객체 초기화
 
-        // SDK 로드 완료 시점에 빨간 마커 이미지를 안전하게 생성
-        var redMarkerImageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png';
-        var markerImageSize = new kakao.maps.Size(35, 35);
-        var markerImageOptions = { offset: new kakao.maps.Point(17, 35) };
-        redMarkerImage = new kakao.maps.MarkerImage(redMarkerImageSrc, markerImageSize, markerImageOptions);
+            // SDK 로드 완료 시점에 빨간 마커 이미지를 안전하게 생성
+            var redMarkerImageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png';
+            var markerImageSize = new kakao.maps.Size(35, 35);
+            var markerImageOptions = { offset: new kakao.maps.Point(17, 35) };
+            redMarkerImage = new kakao.maps.MarkerImage(redMarkerImageSrc, markerImageSize, markerImageOptions);
 
-        isMapReady = true;
-        map.relayout();
+            isMapReady = true;
+            map.relayout();
 
-        // 마우스 드래그로 지도 이동이 끝났을 때 감지
-        kakao.maps.event.addListener(map, 'dragend', function () {
-            debounceNotifyBounds();
+            // 마우스 드래그로 지도 이동이 끝났을 때 감지
+            kakao.maps.event.addListener(map, 'dragend', function () {
+                debounceNotifyBounds();
+            });
+
+            // 마우스 휠 줌(확대/축소) 레벨이 변경되었을 때 감지
+            kakao.maps.event.addListener(map, 'zoom_changed', function () {
+                debounceNotifyBounds();
+            });
+
+            // 지도 조작이 완전히 멈춘 유휴 상태(idle) 감지
+            kakao.maps.event.addListener(map, 'idle', function () {
+                debounceNotifyBounds();
+            });
+
+            // 초기 지도 로딩 완료 즉시 현재 화면 영역 데이터 1회 요청
+            notifyParentBounds();
         });
-
-        // 마우스 휠 줌(확대/축소) 레벨이 변경되었을 때 감지
-        kakao.maps.event.addListener(map, 'zoom_changed', function () {
-            debounceNotifyBounds();
-        });
-
-        // 지도 조작이 완전히 멈춘 유휴 상태(idle) 감지
-        kakao.maps.event.addListener(map, 'idle', function () {
-            debounceNotifyBounds();
-        });
-
-        // 초기 지도 로딩 완료 즉시 현재 화면 영역 데이터 1회 요청
-        notifyParentBounds();
-    });
+    } else {
+        console.error("카카오 지도 SDK가 로드되지 않았습니다. Nginx 프록시 설정과 네트워크 상태를 확인하세요.");
+    }
 
     /**
      * 디바운스 헬퍼
@@ -98,33 +104,41 @@
     }
 
     /**
-     * 2. [CORS 해결 핵심] 백엔드 프록시 서버를 통해 장소/주소 검색 요청
+     * 2. [스마트 장소/주소 통합 검색]
      */
     function searchPlace(keyword) {
-        if (!isMapReady) return;
+        if (!isMapReady || !ps || !geocoder) return;
 
-        // 브라우저가 직접 dapi.kakao.com을 호출하지 않고, 우리 백엔드 서버(`/api/kakao/search`)를 거치도록 요청
-        fetch(`/api/kakao/search?query=${encodeURIComponent(keyword)}`, {
-            method: 'GET'
-        })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error("장소 검색 중 오류가 발생했습니다.");
-                }
-                return response.json();
-            })
-            .then(data => {
-                // 백엔드가 카카오 API를 대신 찔러서 받아온 위도(lat), 경도(lng), 장소명(placeName)을 처리
-                if (data && data.lat && data.lng) {
-                    moveAndMarkPlace(data.lat, data.lng, data.placeName);
-                } else {
+        // 1순위: 행정동/지명인지 주소 검색 먼저 시도
+        geocoder.addressSearch(keyword, function (addrResult, addrStatus) {
+            if (addrStatus === kakao.maps.services.Status.OK && addrResult.length > 0) {
+                var target = addrResult[0];
+                moveAndMarkPlace(target.y, target.x, target.address_name);
+                return;
+            }
+
+            // 2순위: 키워드 장소 검색 수행
+            ps.keywordSearch(keyword, function (data, status, pagination) {
+                if (status === kakao.maps.services.Status.OK && data.length > 0) {
+                    var bestPlace = data[0];
+
+                    for (var i = 0; i < data.length; i++) {
+                        var item = data[i];
+                        if (item.category_group_code === 'SW8' || item.place_name.includes(keyword + '역')) {
+                            bestPlace = item;
+                            break;
+                        }
+                    }
+
+                    moveAndMarkPlace(bestPlace.y, bestPlace.x, bestPlace.place_name);
+
+                } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
                     alert("일치하는 장소를 찾을 수 없습니다.");
+                } else {
+                    alert("장소 검색 중 오류가 발생했습니다.");
                 }
-            })
-            .catch(error => {
-                console.error("Search Error:", error);
-                alert("장소 검색 중 오류가 발생했습니다.");
             });
+        });
     }
 
     /**
