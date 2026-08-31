@@ -1,0 +1,4 @@
+/home/docker1/my-live-project/service-main/src/test/java/com/example/demo/DemoApplicationTests.java
+/home/docker1/my-live-project/service-main/src/test/java/com/example/demo/controller/AirRaidShelterControllerTest.java
+/home/docker1/my-live-project/service-main/src/test/java/com/example/demo/controller/EarthquakeShelterControllerTest.java
+/home/docker1/my-live-project/service-main/src/test/java/com/example/demo/controller/FloodShelterControllerTest.java
