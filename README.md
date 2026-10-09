@@ -293,3 +293,25 @@ docs/
 ---
 
 **대피할지도**는 재난 유형별 대피소 데이터를 지도 기반으로 탐색할 수 있도록 구현한 프로젝트입니다. 위치 기반 조회와 계층형 백엔드 구조를 통해 사용자가 필요한 정보를 보다 직관적으로 확인하는 것을 목표로 합니다.
+
+
+---
+
+## 📸 프로젝트 화면 및 ERD
+
+> <span style="color:#E67E22"><strong>🟠 [추가 예정] 실제 실행 화면</strong></span>
+>
+> 아래 위치에 프로젝트 실행 화면 캡처를 추가하세요.
+>
+> <!-- TODO: 실제 실행 화면 이미지를 업로드한 뒤 아래 예시를 수정하세요. -->
+> <!-- 예시: ![메인 화면](docs/images/main-screen.png) -->
+>
+> <span style="color:#E67E22"><strong>🟠 [추가 예정] 지도 기반 대피소 조회 화면</strong></span>
+>
+> <!-- TODO: 지도에서 대피소를 조회하는 화면 캡처를 추가하세요. -->
+> <!-- 예시: ![대피소 조회 화면](docs/images/shelter-map.png) -->
+>
+> <span style="color:#E67E22"><strong>🟠 [추가 예정] ERD (데이터베이스 설계도)</strong></span>
+>
+> <!-- TODO: ERD 이미지 파일을 docs/images/erd.png 경로에 추가한 뒤 아래 예시를 수정하세요. -->
+> <!-- 예시: ![ERD](docs/images/erd.png) -->
