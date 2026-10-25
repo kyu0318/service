@@ -12,7 +12,7 @@
 
 Service와 Admin은 같은 팀 프로젝트의 구성 요소. 김규현의 개발 담당 범위는 Service 전체이며, Admin 개발은 다른 팀원이 담당했습니다.
 
-[Service 저장소](https://github.com/kyu0318/service) · [Admin 원본 — 다른 팀원 담당](https://github.com/ehdgus4026-tech/admin) · [인프라 구축 기록](https://app.notion.com/p/1-Docker-Host-3c910d3ee8d380e780f7c6db82d112a8)
+[Service 저장소](https://github.com/kyu0318/service) · [Admin 원본 — 다른 팀원 담당](https://github.com/ehdgus4026-tech/admin) · [인프라 구축 기록](https://road-bloom-792.notion.site/1-Docker-Host-3c910d3ee8d380e780f7c6db82d112a8)
 
 - 두 애플리케이션의 현재 DB 연결 설정: 동일 대상 참조, 대피소 데이터 조회·관리 기능 분담
 - 실제 배포 환경의 연결 상태: 별도 확인 필요
@@ -79,7 +79,7 @@ Apache Commons CSV·Actuator: POM 의존성 선언 확인. 실제 CSV 처리·�
 
 ## 김규현 담당 인프라 기록
 
-[Docker Host 구축 원문](https://app.notion.com/p/1-Docker-Host-3c910d3ee8d380e780f7c6db82d112a8)의 절차·설정 화면 기준
+[Docker Host 구축 원문](https://road-bloom-792.notion.site/1-Docker-Host-3c910d3ee8d380e780f7c6db82d112a8)의 절차·설정 화면 기준
 
 - Ubuntu 서버의 Docker 설치 및 Python 3.9-slim 이미지 준비
 - Docker Host 측 네트워크 대역과 DB 접속 환경 설정
