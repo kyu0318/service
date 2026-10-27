@@ -7,12 +7,14 @@
 | 구성 요소 | 역할 | 개발·담당 범위 |
 | --- | --- | --- |
 | Service · 이 저장소 | 사용자 지도 화면, 대피소 조회 API, 재난 유형 탭 API | **김규현: Service 개발 전담** |
-| Admin · 별도 저장소 | 대피소 데이터 관리, 회원·게시글 관리 화면 | **다른 팀원: Admin 개발 담당** |
+| Admin · 별도 저장소 | 회원·대피소·게시판 관리, Python 수집·적재 연계 | **다른 팀원: Admin 개발 담당** |
 | Docker Host · 인프라 문서 | 데이터 처리 작업을 실행하는 서버 환경 | **김규현: Docker Host 구성과 해당 호스트의 DB 연결 및 컨테이너 실행·Cron 설정 기록** |
 
 Service와 Admin은 같은 팀 프로젝트의 구성 요소. 김규현의 개발 담당 범위는 Service 전체이며, Admin 개발은 다른 팀원이 담당했습니다.
 
-[Service 저장소](https://github.com/kyu0318/service) · [Admin 원본 — 다른 팀원 담당](https://github.com/ehdgus4026-tech/admin) · [인프라 구축 기록](https://road-bloom-792.notion.site/1-Docker-Host-3c910d3ee8d380e780f7c6db82d112a8)
+Admin 소스는 원본 접근 권한 변경에 대비해 `kyu0318/admin-main`에도 보존. 복사·문서 편집 이력과 Admin 개발 기여를 구분
+
+[Service 저장소](https://github.com/kyu0318/service) · [Admin 소스 복사본 · 팀원 개발](https://github.com/kyu0318/admin-main) · [팀원 Admin 원본](https://github.com/ehdgus4026-tech/admin) · [인프라 구축 기록](https://road-bloom-792.notion.site/1-Docker-Host-3c910d3ee8d380e780f7c6db82d112a8)
 
 - 두 애플리케이션의 현재 DB 연결 설정: 동일 대상 참조, 대피소 데이터 조회·관리 기능 분담
 - 실제 배포 환경의 연결 상태: 별도 확인 필요
